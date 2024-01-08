@@ -33,6 +33,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/alecthomas/kingpin/v2"
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
@@ -154,6 +155,7 @@ type flagConfig struct {
 	enableNewSDManager         bool
 	enablePerStepStats         bool
 	enableAutoGOMAXPROCS       bool
+	enableAutoGOMEMLIMIT       bool
 
 	prometheusURL   string
 	corsRegexString string
@@ -197,6 +199,9 @@ func (c *flagConfig) setFeatureListOptions(logger log.Logger) error {
 			case "auto-gomaxprocs":
 				c.enableAutoGOMAXPROCS = true
 				level.Info(logger).Log("msg", "Automatically set GOMAXPROCS to match Linux container CPU quota")
+			case "auto-gomemlimit":
+				c.enableAutoGOMEMLIMIT = true
+				level.Info(logger).Log("msg", "Automatically set GOMEMLIMIT to match Linux container memory limit")
 			case "no-default-scrape-port":
 				c.scrape.NoDefaultPort = true
 				level.Info(logger).Log("msg", "No default port will be appended to scrape targets' addresses.")
@@ -692,6 +697,19 @@ func main() {
 		}
 		if _, err := maxprocs.Set(maxprocs.Logger(l)); err != nil {
 			level.Warn(logger).Log("component", "automaxprocs", "msg", "Failed to set GOMAXPROCS automatically", "err", err)
+		}
+	}
+
+	if cfg.enableAutoGOMEMLIMIT {
+		_, err := memlimit.SetGoMemLimitWithOpts(
+			memlimit.WithRatio(0.9),
+			memlimit.WithEnv(),
+			memlimit.WithProvider(
+				memlimit.FromCgroup,
+			),
+		)
+		if err != nil {
+			level.Warn(logger).Log("component", "automemlimit", "msg", "Failed to set GOMEMLIMIT automatically", "err", err)
 		}
 	}
 
